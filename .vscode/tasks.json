@@ -6,7 +6,7 @@
         {
             "label": "cabal-fmt",
             "type": "shell",
-            "command": "cabal-fmt -i start-haskell.cabal",
+            "command": "cabal-fmt -i benchmark-effect-libraries.cabal",
             "presentation": {
                 "echo": true,
                 "reveal": "never",
@@ -19,7 +19,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "cabal build --enable-tests",
+            "command": "cabal build --enable-tests --enable-benchmarks",
             "presentation": {
                 "echo": true,
                 "reveal": "always",

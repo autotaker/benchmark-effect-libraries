@@ -4,12 +4,12 @@ cabal-version:      2.4
 -- init'.  For further documentation, see
 -- http://haskell.org/cabal/users-guide/
 
-name:               start-haskell
+name:               benchmark-effect-libraries
 version:            0.1.0.0
 synopsis:           my favorite cabal project example
 
 -- description:
-homepage:           https://github.com/autotaker/start-haskell
+homepage:           https://github.com/autotaker/benchmark-effect-libraries
 
 -- bug-reports:
 license:            BSD-3-Clause
@@ -24,9 +24,20 @@ extra-source-files:
   README.md
 
 common shared-properties
-  build-depends:    base ^>=4.13.0.0
+  build-depends:
+    , base                 ^>=4.13.0.0
+    , extensible-effects   ^>=5.0.0.1
+    , extensible-skeleton  ^>=0
+    , monad-skeleton       ^>=0.1.5
+    , rio                  ^>=0.1.20.0
+    , template-haskell     ^>=2.15.0.0
+    , temporary            ^>=1.3
+    , transformers         ^>=0.5.6.2
+
   default-language: Haskell2010
-  ghc-options:      -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -Wmissing-import-lists -Wcompat
+  ghc-options:
+    -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates
+    -Wmissing-import-lists -Wcompat
 
 common test-depends
   build-depends:      hspec ^>=2.7.4
@@ -36,22 +47,18 @@ library
   import:          shared-properties
 
   -- cabal-fmt: expand src
-  exposed-modules: MyLib
+  exposed-modules:
+    ExtensibleEffects
+    Fib
+    MyLib
+    Reader
+    Template
 
   -- other-modules:
   -- other-extensions:
   hs-source-dirs:  src
 
-executable start-haskell
-  import:         shared-properties
-  main-is:        Main.hs
-
-  -- other-modules:
-  -- other-extensions:
-  build-depends:  start-haskell
-  hs-source-dirs: app
-
-test-suite start-haskell-test
+test-suite benchmark-effect-libraries-test
   import:         shared-properties, test-depends
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
@@ -59,4 +66,13 @@ test-suite start-haskell-test
 
   -- cabal-fmt: expand test -Spec
   other-modules:  MyLibSpec
-  build-depends:  start-haskell
+  build-depends:  benchmark-effect-libraries
+
+benchmark bench-effect-libraries
+  import:         shared-properties
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench
+  main-is:        Bench.hs
+  build-depends:
+    , benchmark-effect-libraries
+    , criterion
