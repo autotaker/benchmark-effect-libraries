@@ -1,13 +1,20 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
+{-# OPTIONS_GHC -ddump-to-file -ddump-simpl #-}
 
 module Fib where
 
 import qualified Control.Eff as E
 import Control.Monad.Skeleton (MonadView (Return), Skeleton, deboneBy)
+import Control.Monad.Trans.Accum (runAccum)
 import Control.Monad.Trans.Cont (runCont)
 import Control.Monad.Trans.Except (runExcept)
 import Control.Monad.Trans.Maybe (MaybeT (runMaybeT))
-import Control.Monad.Trans.Reader (runReader)
+import qualified Control.Monad.Trans.RWS.CPS as C
+import qualified Control.Monad.Trans.RWS.Lazy as L
+import qualified Control.Monad.Trans.RWS.Strict as S
+import Control.Monad.Trans.Reader (ReaderT (runReaderT), runReader)
+import Control.Monad.Trans.Select (runSelect)
 import qualified Control.Monad.Trans.State.Lazy as L
 import qualified Control.Monad.Trans.State.Strict as S
 import qualified Control.Monad.Trans.Writer.CPS as C
@@ -17,88 +24,235 @@ import qualified Data.Extensible.Effect as Skeleton
 import Data.Functor.Identity (Identity (runIdentity))
 import RIO (runRIO)
 
-fib :: Monad m => Int -> m Int
+xor :: Bool -> Bool -> Bool
+xor True x = not x
+xor False x = x
+
+fib :: Monad m => Int -> m Bool
 fib = go
   where
     go n
-      | n <= 1 = pure n
+      | n <= 1 = pure $! n == 1
       | otherwise = do
         r1 <- fib (n -1)
         r2 <- fib (n -2)
-        pure $ r1 + r2
+        pure $! r1 `xor` r2
+
+{-
+strictFib :: Monad m => Int -> m Bool
+strictFib = go
+  where
+    go n
+      | n <= 1 = pure $ n == 1
+      | otherwise = do
+        !r1 <- fib (n -1)
+        !r2 <- fib (n -2)
+        pure $! r1 `xor` r2
+        -}
 
 {-# NOINLINE slowFib #-}
-slowFib :: Monad m => Int -> m Int
+slowFib :: Monad m => Int -> m Bool
 slowFib = fib
 
-fibPure :: Int -> Int
-fibPure = runIdentity . fib
+fibIdentity :: Int -> Bool
+fibIdentity = runIdentity . fib
 
-fibIO :: Int -> IO Int
+fibIO :: Int -> IO Bool
 fibIO = fib
 
-fibMaybe :: Int -> Maybe Int
+fibMaybe :: Int -> Maybe Bool
 fibMaybe = fib
 
-fibMaybeT :: Int -> Maybe Int
+fibList :: Int -> [Bool]
+fibList = fib
+
+fibReader :: Int -> Bool
+fibReader = flip fib ()
+
+fibMaybeT :: Int -> Maybe Bool
 fibMaybeT = runIdentity . runMaybeT . fib
 
-fibEither :: Int -> Either () Int
+fibEither :: Int -> Either () Bool
 fibEither = fib
 
-fibExceptT :: Int -> Either () Int
+fibExceptT :: Int -> Either () Bool
 fibExceptT = runExcept . fib
 
-fibStateST :: Int -> (Int, ())
+fibStateST :: Int -> (Bool, ())
 fibStateST = (`S.runState` ()) . fib
 
-slowFibStateST :: Int -> (Int, ())
-slowFibStateST = (`S.runState` ()) . slowFib
-
-fibStateLT :: Int -> (Int, ())
+fibStateLT :: Int -> (Bool, ())
 fibStateLT = (`L.runState` ()) . fib
 
-fibReaderT :: Int -> Int
+fibReaderT :: Int -> Bool
 fibReaderT = (`runReader` ()) . fib
 
-fibContT :: Int -> Int
+fibContT :: Int -> Bool
 fibContT = (`runCont` id) . fib
 
-fibWriterLT :: Int -> (Int, ())
+fibWriterLT :: Int -> (Bool, ())
 fibWriterLT = L.runWriter . fib
 
-fibWriterCT :: Int -> (Int, ())
+fibWriterCT :: Int -> (Bool, ())
 fibWriterCT = C.runWriter . fib
 
-fibWriterST :: Int -> (Int, ())
+fibWriterST :: Int -> (Bool, ())
 fibWriterST = S.runWriter . fib
 
-fibEff :: Int -> Int
+fibRWSST :: Int -> (Bool, (), ())
+fibRWSST x = S.runRWS (fib x) () ()
+
+fibRWSLT :: Int -> (Bool, (), ())
+fibRWSLT x = L.runRWS (fib x) () ()
+
+fibRWSCT :: Int -> (Bool, (), ())
+fibRWSCT x = C.runRWS (fib x) () ()
+
+fibSelectT :: Int -> Bool
+fibSelectT = (`runSelect` const ()) . fib
+
+fibAccumT :: Int -> (Bool, ())
+fibAccumT = (`runAccum` ()) . fib
+
+fibEff :: Int -> Bool
 fibEff = E.run . fib
 
-fibRIO :: Int -> IO Int
-fibRIO = runRIO () . fib
-
-data NoEffect a
-
-fibSkeleton :: Int -> Int
-fibSkeleton = runSkeleton . fib
-  where
-    runSkeleton :: Skeleton NoEffect a -> a
-    runSkeleton = deboneBy $ \case
-      Return a -> a
-
-fibEffSkeleton :: Int -> Int
+fibEffSkeleton :: Int -> Bool
 fibEffSkeleton = Skeleton.leaveEff . fib
 
-slowFibEff :: Int -> Int
-slowFibEff = E.run . slowFib
+fibRIO :: Int -> IO Bool
+fibRIO = runRIO () . fib
 
-slowFibPure :: Int -> Int
-slowFibPure = runIdentity . slowFib
+slowFibIdentity :: Int -> Bool
+slowFibIdentity = runIdentity . slowFib
 
-slowFibIO :: Int -> IO Int
+slowFibIO :: Int -> IO Bool
 slowFibIO = slowFib
 
-slowFibRIO :: Int -> IO Int
+slowFibMaybe :: Int -> Maybe Bool
+slowFibMaybe = slowFib
+
+slowFibList :: Int -> [Bool]
+slowFibList = slowFib
+
+slowFibReader :: Int -> Bool
+slowFibReader = flip slowFib ()
+
+slowFibMaybeT :: Int -> Maybe Bool
+slowFibMaybeT = runIdentity . runMaybeT . slowFib
+
+slowFibEither :: Int -> Either () Bool
+slowFibEither = slowFib
+
+slowFibExceptT :: Int -> Either () Bool
+slowFibExceptT = runExcept . slowFib
+
+slowFibStateST :: Int -> (Bool, ())
+slowFibStateST = (`S.runState` ()) . slowFib
+
+slowFibStateLT :: Int -> (Bool, ())
+slowFibStateLT = (`L.runState` ()) . slowFib
+
+slowFibReaderT :: Int -> Bool
+slowFibReaderT = (`runReader` ()) . slowFib
+
+slowFibContT :: Int -> Bool
+slowFibContT = (`runCont` id) . slowFib
+
+slowFibWriterLT :: Int -> (Bool, ())
+slowFibWriterLT = L.runWriter . slowFib
+
+slowFibWriterCT :: Int -> (Bool, ())
+slowFibWriterCT = C.runWriter . slowFib
+
+slowFibWriterST :: Int -> (Bool, ())
+slowFibWriterST = S.runWriter . slowFib
+
+slowFibRWSST :: Int -> (Bool, (), ())
+slowFibRWSST x = S.runRWS (slowFib x) () ()
+
+slowFibRWSLT :: Int -> (Bool, (), ())
+slowFibRWSLT x = L.runRWS (slowFib x) () ()
+
+slowFibRWSCT :: Int -> (Bool, (), ())
+slowFibRWSCT x = C.runRWS (slowFib x) () ()
+
+slowFibSelectT :: Int -> Bool
+slowFibSelectT = (`runSelect` const ()) . slowFib
+
+slowFibAccumT :: Int -> (Bool, ())
+slowFibAccumT = (`runAccum` ()) . slowFib
+
+slowFibEff :: Int -> Bool
+slowFibEff = E.run . slowFib
+
+slowFibEffSkeleton :: Int -> Bool
+slowFibEffSkeleton = Skeleton.leaveEff . slowFib
+
+slowFibRIO :: Int -> IO Bool
 slowFibRIO = runRIO () . slowFib
+
+{-
+strictFibIdentity :: Int -> Bool
+strictFibIdentity = runIdentity . strictFib
+
+strictFibIO :: Int -> IO Bool
+strictFibIO = strictFib
+
+strictFibMaybe :: Int -> Maybe Bool
+strictFibMaybe = strictFib
+
+strictFibList :: Int -> [Bool]
+strictFibList = strictFib
+
+strictFibReader :: Int -> Bool
+strictFibReader = flip strictFib ()
+
+strictFibMaybeT :: Int -> Maybe Bool
+strictFibMaybeT = runIdentity . runMaybeT . strictFib
+
+strictFibEither :: Int -> Either () Bool
+strictFibEither = strictFib
+
+strictFibExceptT :: Int -> Either () Bool
+strictFibExceptT = runExcept . strictFib
+
+strictFibStateST :: Int -> (Bool, ())
+strictFibStateST = (`S.runState` ()) . strictFib
+
+strictFibStateLT :: Int -> (Bool, ())
+strictFibStateLT = (`L.runState` ()) . strictFib
+
+strictFibReaderT :: Int -> Bool
+strictFibReaderT = (`runReader` ()) . strictFib
+
+strictFibContT :: Int -> Bool
+strictFibContT = (`runCont` id) . strictFib
+
+strictFibWriterLT :: Int -> (Bool, ())
+strictFibWriterLT = L.runWriter . strictFib
+
+strictFibWriterCT :: Int -> (Bool, ())
+strictFibWriterCT = C.runWriter . strictFib
+
+strictFibWriterST :: Int -> (Bool, ())
+strictFibWriterST = S.runWriter . strictFib
+
+strictFibRWSST :: Int -> (Bool, (), ())
+strictFibRWSST x = S.runRWS (strictFib x) () ()
+
+strictFibRWSLT :: Int -> (Bool, (), ())
+strictFibRWSLT x = L.runRWS (strictFib x) () ()
+
+strictFibRWSCT :: Int -> (Bool, (), ())
+strictFibRWSCT x = C.runRWS (strictFib x) () ()
+
+strictFibEff :: Int -> Bool
+strictFibEff = E.run . strictFib
+
+strictFibEffSkeleton :: Int -> Bool
+strictFibEffSkeleton = Skeleton.leaveEff . strictFib
+
+strictFibRIO :: Int -> IO Bool
+strictFibRIO = runRIO () . strictFib
+-}
